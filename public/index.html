@@ -736,12 +736,6 @@
     }
 
     async function getAIResponse(userMessage, method) {
-      // Check if Claude API is available
-      if (typeof window.claude === 'undefined' || typeof window.claude.complete !== 'function') {
-        // Fallback responses when Claude API is not available
-        return getFallbackResponse(userMessage, method);
-      }
-
       // Build context based on methodology and conversation history
       const systemPrompt = buildSystemPrompt(method);
       const conversationContext = buildConversationContext();
@@ -770,8 +764,20 @@ Respond with a JSON object in this exact format:
 Your entire response MUST be valid JSON only. Do not include any text outside the JSON structure.`;
 
       try {
-        const response = await window.claude.complete(prompt);
-        const parsedResponse = JSON.parse(response);
+        const response = await fetch('/api/claude', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ prompt })
+        });
+
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const parsedResponse = JSON.parse(data.response);
         
         // Store insights
         if (parsedResponse.insights) {
@@ -785,7 +791,7 @@ Your entire response MUST be valid JSON only. Do not include any text outside th
         
         return parsedResponse.response;
       } catch (error) {
-        console.error('Failed to parse AI response:', error);
+        console.error('Failed to get AI response:', error);
         return getFallbackResponse(userMessage, method);
       }
     }

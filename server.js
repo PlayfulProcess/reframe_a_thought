@@ -9,35 +9,29 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Route for the main app
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// CORS headers (optional if serving frontend from same server)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  next();
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-// Claude API endpoint
+// Route to proxy Claude API calls
 app.post('/api/claude', async (req, res) => {
   try {
     const { prompt } = req.body;
-    
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required' });
+    if (!process.env.CLAUDE_API_KEY) {
+      return res.status(200).json({ 
+        fallback: true,
+        message: 'Claude API key not configured - using fallback responses'
+      });
     }
-
-    const apiKey = process.env.CLAUDE_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Claude API key not configured' });
-    }
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': process.env.CLAUDE_API_KEY,
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
@@ -51,30 +45,46 @@ app.post('/api/claude', async (req, res) => {
         ]
       })
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Claude API error:', errorText);
-      return res.status(response.status).json({ 
-        error: 'Failed to get AI response',
-        details: errorText
+    if (!claudeResponse.ok) {
+      console.error('Claude API error:', claudeResponse.status, claudeResponse.statusText);
+      return res.status(200).json({ 
+        fallback: true,
+        message: 'Claude API call failed - using fallback responses'
       });
     }
-
-    const data = await response.json();
-    const aiResponse = data.content[0].text;
-    
-    res.json({ response: aiResponse });
+    const claudeData = await claudeResponse.json();
+    const responseText = claudeData.content[0].text;
+    res.json({ 
+      response: responseText,
+      success: true 
+    });
   } catch (error) {
-    console.error('Error calling Claude API:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Claude API error:', error);
+    res.status(200).json({ 
+      fallback: true,
+      message: 'API call failed - using fallback responses'
+    });
   }
+});
+
+// Route for the main app
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    hasClaudeKey: !!process.env.CLAUDE_API_KEY
+  });
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`Reframe a Thought app running on port ${PORT}`);
-  console.log(`Open your browser and go to: http://localhost:${PORT}`);
+  console.log(`Claude API configured: ${!!process.env.CLAUDE_API_KEY}`);
 }).on('error', (err) => {
   console.error('Error starting server:', err);
   process.exit(1);

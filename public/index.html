@@ -764,6 +764,7 @@ Respond with a JSON object in this exact format:
 Your entire response MUST be valid JSON only. Do not include any text outside the JSON structure.`;
 
       try {
+        // Try calling your server's Claude API proxy
         const response = await fetch('/api/claude', {
           method: 'POST',
           headers: {
@@ -772,24 +773,32 @@ Your entire response MUST be valid JSON only. Do not include any text outside th
           body: JSON.stringify({ prompt })
         });
 
-        if (!response.ok) {
-          throw new Error(`API request failed: ${response.status}`);
+        const data = await response.json();
+        
+        if (data.fallback || !response.ok) {
+          // Server returned fallback or error
+          return getFallbackResponse(userMessage, method);
         }
 
-        const data = await response.json();
-        const parsedResponse = JSON.parse(data.response);
-        
-        // Store insights
-        if (parsedResponse.insights) {
-          if (parsedResponse.insights.thoughtPattern) {
-            userInsights.patterns.push(parsedResponse.insights.thoughtPattern);
+        // If we have a real Claude response, parse it
+        if (data.response) {
+          const parsedResponse = typeof data.response === 'string' ? JSON.parse(data.response) : data.response;
+          
+          // Store insights
+          if (parsedResponse.insights) {
+            if (parsedResponse.insights.thoughtPattern) {
+              userInsights.patterns.push(parsedResponse.insights.thoughtPattern);
+            }
+            if (parsedResponse.insights.emotionalState) {
+              userInsights.feelings.push(parsedResponse.insights.emotionalState);
+            }
           }
-          if (parsedResponse.insights.emotionalState) {
-            userInsights.feelings.push(parsedResponse.insights.emotionalState);
-          }
+          
+          return parsedResponse.response;
         }
+
+        return getFallbackResponse(userMessage, method);
         
-        return parsedResponse.response;
       } catch (error) {
         console.error('Failed to get AI response:', error);
         return getFallbackResponse(userMessage, method);

@@ -2,6 +2,8 @@
 
 An AI-powered inner freedom journey app for Jongu.org, built with Express.js and Claude AI.
 
+I was playing around the idea of rebuilding a Claude wellness tool artifact (https://claude.ai/public/artifacts/60498b55-5928-4aaf-a2d9-eccaa2a8f9e0?ref=playfulprocess.com) into a full stack app that can be used here: https://reframe-a-thought.onrender.com/.
+
 ## Features
 
 - AI-powered inner freedom journey experience
